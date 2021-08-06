@@ -1,5 +1,7 @@
 # TOPT : a Topological OPtimization Toolbox
 
+Authors: [Mathieu Carrière](https://mathieucarriere.github.io/website/) and [Théo Lacombe](https://tlacombe.github.io).
+
 This repository is a work in progress. 
 A minimal working example on how to perform optimization on top of topological descriptors will be presented by the end of August 2021.
 
