@@ -15,7 +15,7 @@ import cvxpy as cp
 ##############################
 
 
-def min_norm_on_convex_hull(G):
+def _min_norm_on_convex_hull(G):
     """
     Minimizing on convex hull
     Warning: sometimes 0 is one of the vertice of te convex hull but the solver do not get it.
@@ -33,7 +33,7 @@ def min_norm_on_convex_hull(G):
 #####################
 
 
-def STPers_G(fct, simplex, dim):
+def _STPers_G(fct, simplex, dim):
     # fct:      function values on the vertices
     # simplex:  simplex tree
     # dim:      homological dimension
@@ -74,7 +74,7 @@ def STPers_G(fct, simplex, dim):
     return indices
 
 
-def STPers_E(fct, simplex, dim, verbosity_level=1):
+def _STPers_E(fct, simplex, dim, verbosity_level = 1):
     """
     Same as before but for extended persistence.
 
@@ -154,7 +154,7 @@ def _treat(x, permutation,  dist_to_x, eps):
     n = x.shape[0]
     x_perm = x[permutation]
     #TODO: why is perm_inv not used anymore?
-    # perm_inv = np.arange(len(permutation))[np.argsort(permutation)]
+    # #perm_inv = np.arange(len(permutation))[np.argsort(permutation)]
     last_to_first = (x[-1]-x_perm[0])**2+(x[0]-x_perm[-1])**2-(x[0]-x_perm[0])**2-(x[-1]-x_perm[-1])**2
     delta_cost = [((x[i]-x_perm[i+1])**2+(x[i+1]-x_perm[i])**2-(x[i]-x_perm[i])**2-(x[i+1]-x_perm[i+1])**2)
                   for i in range(n-1)]
@@ -174,7 +174,7 @@ def _treat(x, permutation,  dist_to_x, eps):
     return permutations_to_consider, distances
 
 
-def get_strata_memoization(F, perm_curr, eps, visited, k=5, timeit=False):
+def _get_strata_memoization(F, perm_curr, eps, visited, k=5, timeit=False):
     t1, n = time(), F.shape[0]
     visited_keys, delete_keys, visited_dists = [], [], []
 
@@ -200,7 +200,7 @@ def get_strata_memoization(F, perm_curr, eps, visited, k=5, timeit=False):
     return visited_keys, visited_dists, delete_keys
 
 
-def get_strata_dijkstra(F, eps, k=5, timeit=True):
+def _get_strata_dijkstra(F, eps, k=5, timeit=True):
     arbitrary = 0
     t1, n, sigma, x = time(), F.shape[0], np.argsort(F), np.sort(F)
     inv_sigma, identity_permutation = np.arange(len(sigma))[np.argsort(sigma)], np.arange(0, n)
@@ -235,7 +235,7 @@ def get_strata_dijkstra(F, eps, k=5, timeit=True):
     return permutations_to_consider, distances_to_consider
 
 
-def get_strata_diffusion(F, eps, k=5, timeit=True):
+def _get_strata_diffusion(F, eps, k=5, timeit=True):
     t1, n = time(), F.shape[0]
     permutations_to_consider, distances_to_consider = [], []
     x = np.sort(F)
@@ -264,18 +264,18 @@ def get_strata_diffusion(F, eps, k=5, timeit=True):
     return permutations_to_consider, distances_to_consider
 
 
-def get_strata_padded(heuristic='diffusion'):
+def _get_strata_padded(heuristic='diffusion'):
     """
     Tensorflow padded version
     """
     def gs(F, eps, card_strata):
         if heuristic == 'diffusion':
-            outp = get_strata_diffusion(F=F, eps=eps, k=card_strata, timeit=False)
+            outp = _get_strata_diffusion(F=F, eps=eps, k=card_strata, timeit=False)
         elif heuristic == 'dijkstra':
-            outp = get_strata_dijkstra(F=F, eps=eps, k=card_strata, timeit=False)
+            outp = _get_strata_dijkstra(F=F, eps=eps, k=card_strata, timeit=False)
         else:
             print('no heuristic provided! using dijkstra by default')
-            outp = get_strata_dijkstra(F=F, eps=eps, k=card_strata, timeit=False)
+            outp = _get_strata_dijkstra(F=F, eps=eps, k=card_strata, timeit=False)
         elems, dists = outp[0], outp[1]
         num = len(elems)
         if num < card_strata:
@@ -293,15 +293,24 @@ def get_strata_padded(heuristic='diffusion'):
 ##################
 
 #TODO: should get_strata take topomean as input instead? (from which we can get self.eps, self.card_strata, etc.)
-def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited, heuristic, complementary_heuristic,
-               epoch, use_vineyards=False, use_memo=True, verbosity_level=1):
+def _get_strata(topomean, STPersTF, perm_curr, epoch):
+
+    F = topomean.F
+    heuristic = topomean.heuristic
+    complementary_heuristic = topomean.complementary_heuristic
+    eps = topomean.epsilon
+    card_strata = topomean.card_strata
+    use_memoization = topomean.use_memoization
+    verbosity_level = topomean.verbosity_level
+    max_dict_size = topomean.max_dict_size
+    visited = topomean.visited
 
     inv_perm_curr = np.argsort(perm_curr)
     nvertex = F.numpy().shape[0]
 
     if heuristic == 'diffusion' or heuristic == 'dijkstra':
 
-        StrataTF = get_strata_padded(heuristic)
+        StrataTF = _get_strata_padded(heuristic)
         inds = tf.cast(tf.stop_gradient(StrataTF(F.numpy(), eps, card_strata)), tf.int32)
         num = inds[0].numpy()
         perms = tf.reshape(inds[1:nvertex*num+1], [num, nvertex])
@@ -309,8 +318,6 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
 
         already = 0
         keys_to_try, dists_to_try = [], []
-        if use_vineyards:
-            diags_todo, keys_todo, argsort_todo, funcs_todo = [], [], [], []
 
         for i in range(num):
 
@@ -320,45 +327,25 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
             permi_sort = perm_curr[inv_permi]
             permi_key = tuple(permi_sort)
 
-            if use_memo:
+            if use_memoization:
                 try:
                     indsi = visited[permi_key]
                     already += 1
                 except KeyError:
-                    if use_vineyards:
-                        diags_todo.append(np.argsort(permi_sort)[None,:])
-                        keys_todo.append(permi_key)
-                        argsort_todo.append(permi_sort[None,:])
-                        funcs_todo.append(tf.gather(F, perm_curr[permi[inv_perm_curr]]).numpy()[None,:])
-                    else:
-                        Fi = tf.gather(F, perm_curr[permi[inv_perm_curr]])
-                        indsi = tf.cast(tf.stop_gradient(STPersTF(Fi.numpy())), tf.int32)
-                        visited[permi_key] = indsi
-            else:
-                if use_vineyards:
-                    diags_todo.append(np.argsort(permi_sort)[None,:])
-                    keys_todo.append(permi_key)
-                    argsort_todo.append(permi_sort[None,:])
-                    funcs_todo.append(tf.gather(F, perm_curr[permi[inv_perm_curr]]).numpy()[None,:])
-                else:
                     Fi = tf.gather(F, perm_curr[permi[inv_perm_curr]])
                     indsi = tf.cast(tf.stop_gradient(STPersTF(Fi.numpy())), tf.int32)
                     visited[permi_key] = indsi
+            else:
+                Fi = tf.gather(F, perm_curr[permi[inv_perm_curr]])
+                indsi = tf.cast(tf.stop_gradient(STPersTF(Fi.numpy())), tf.int32)
+                visited[permi_key] = indsi
 
             keys_to_try.append(permi_key)
             dists_to_try.append(disti)
 
-        if use_vineyards and len(diags_todo) > 0:
-            big_fctsi = np.vstack([  np.pad(np.vstack(diags_todo),   ((0,card_strata-len(diags_todo)),(0,0)), mode='edge'),
-                                     np.pad(np.vstack(argsort_todo), ((0,card_strata-len(diags_todo)),(0,0)), mode='edge')
-                                  ])
-            indsi = tf.stop_gradient(STPersTF(big_fctsi))
-            cdgi = indsi[0]
-            indsi = indsi[1:]
-            for i in range(len(diags_todo)):
-                visited[keys_todo[i]] = indsi[i*(2*cdgi):(i+1)*(2*cdgi)]
         if verbosity_level >= 1:
-            print('Found %s new permutations, %s already recorded permutations, among %s permutations in the permutahedron obtained with heuristic %s'
+            print('Found %s new permutations, %s already recorded permutations, '
+                  'among %s permutations in the permutahedron obtained with heuristic %s'
                   %(num-already, already, num, heuristic))
             print('Number of recorded permutations is now %s' %len(visited.keys()))
 
@@ -375,7 +362,7 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
 
     elif heuristic == 'memoization':
 
-        visited_keys, visited_dists, delete_keys = get_strata_memoization(F, perm_curr, eps, visited, card_strata)
+        visited_keys, visited_dists, delete_keys = _get_strata_memoization(F, perm_curr, eps, visited, card_strata)
         keys_to_try = visited_keys
         dists_to_try = visited_dists
         num_visited_keys = len(visited_keys)
@@ -416,15 +403,14 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
             num_to_visit = num_missing_keys
             #num_to_visit = card_strata
 
-            StrataTF = get_strata_padded(complementary_heuristic)
+            StrataTF = _get_strata_padded(complementary_heuristic)
             inds = tf.stop_gradient(StrataTF(F.numpy(), eps, num_to_visit))
             num = inds[0].numpy()[0]
             perms = tf.reshape(inds[1:nvertex*num+1], [num, nvertex])
             dists = tf.reshape(inds[nvertex*num_missing_keys+1:nvertex*num_missing_keys+1+num], [num])
 
             already = 0
-            if use_vineyards:
-                diags_todo, keys_todo, argsort_todo, funcs_todo = [], [], [], []
+            diags_todo = []
 
             for i in range(num):
 
@@ -438,16 +424,10 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
                     indsi = visited[permi_key]
                     already += 1
                 except KeyError:
-                    if use_vineyards:
-                        diags_todo.append(np.argsort(permi_sort)[None,:])
-                        keys_todo.append(permi_key)
-                        argsort_todo.append(permi_sort[None,:])
-                        funcs_todo.append(tf.gather(F, perm_curr[permi[inv_perm_curr]]).numpy()[None,:])
-                    else:
-                        diags_todo.append(np.argsort(permi_sort)[None,:])
-                        Fi = tf.gather(F, perm_curr[permi[inv_perm_curr]])
-                        indsi = tf.stop_gradient(STPersTF(Fi.numpy()))
-                        visited[permi_key] = indsi
+                    diags_todo.append(np.argsort(permi_sort)[None,:])
+                    Fi = tf.gather(F, perm_curr[permi[inv_perm_curr]])
+                    indsi = tf.stop_gradient(STPersTF(Fi.numpy()))
+                    visited[permi_key] = indsi
 
                     new_keys.append(permi_key)
                     new_dists.append(disti)
@@ -455,17 +435,9 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
                 if len(new_keys) == num_missing_keys:
                     break
 
-            if use_vineyards and len(diags_todo) > 0:
-                big_fctsi = np.vstack([  np.pad(np.vstack(diags_todo),   ((0,card_strata-len(diags_todo)),(0,0)), mode='edge'),
-                                         np.pad(np.vstack(argsort_todo), ((0,card_strata-len(diags_todo)),(0,0)), mode='edge')
-                                      ])
-                indsi = tf.stop_gradient(STPersTF(big_fctsi))
-                cdgi = indsi[0]
-                indsi = indsi[1:]
-                for i in range(len(diags_todo)):
-                    visited[keys_todo[i]] = indsi[i*(2*cdgi):(i+1)*(2*cdgi)]
             if verbosity_level >= 1:
-                print('Found %s new permutations, %s already recorded permutations, among %s permutations in the permutahedron obtained with heuristic %s'
+                print('Found %s new permutations, %s already recorded permutations, among %s permutations '
+                      'in the permutahedron obtained with heuristic %s'
                       %(len(new_keys), already, num, complementary_heuristic))
                 print('Number of recorded permutations is %s' %len(visited.keys()))
 
@@ -486,74 +458,72 @@ def get_strata(F, STPersTF, perm_curr, eps, card_strata, max_dict_size, visited,
 ###  TensorFlow model  ###
 ##########################
 
-
 class TopoMeanModel(tf.keras.Model):
-
-    def __init__(self, F, L, simplex, params, **kwargs):
-        """
-        F: function values on the vertices of stbase
+    """
         L: list of given persistence diagrams---the model is supposed to compute their Fréchet mean
+        F: function values on the vertices of stbase
         params: param for the TopoMeanModel, see the corresponding cell
-        """
+    """
 
-        super().__init__(dynamic=True, **kwargs)
-        self.F, self.L, self.simplex = F, L, simplex #np.array([simplex])
-        self.dim, self.mode = params['dim'], params['mode']
-        self.epsilon, self.card_strata = params['epsilon'], params['card_strata']
-        self.heuristic, self.complementary_heuristic = params['heuristic'], params['complementary_heuristic']
-        self.eta, self.beta, self.lipschitz = params['eta'], params['beta'], params['lipschitz']
-        self.gamma, self.max_dict_size = params['gamma'], params['max_dict_size']
-        self.order = params['order']
-        self.use_vineyards = params['use_vineyards']
-        self.use_memo = params['use_memoization']
-        self.extended = params['extended']
+    def __init__(self, F, diagrams, simplex,
+             dim = 0,
+             mode = 'vanilla',
+             card_strata = 24,
+             card_dgm_max=50,  # Note : not used while long range strata is not provided.
+             max_dict_size=500,
+             heuristic = 'dijkstra',
+             complementary_heuristic = 'dijkstra',
+             epsilon=0.1,
+             eta = 1e-2,
+             beta = 0.5,
+             gamma=0.5,
+             lipschitz = 1,
+             order = 2.,
+             internal_p = 2.,
+             use_memoization = True,
+             extended = True,
+             verbosity_level = 0,
+             normalize_gradient=True,
+             vanilla_decay = False
+             ):
+        # Short preprocessing to make everything comparable
+        if (mode == "gradient_sampling") | (mode == "vanilla"):
+            epsilon = epsilon / 2  # To make strata and gradient_sampling comparable
+
+        super().__init__(dynamic=True)
+
+        self.F, self.simplex = F, simplex
+        if isinstance(diagrams, list):
+            self.L = diagrams
+        else:
+            self.L = [diagrams]
+
+        self.dim, self.mode = dim, mode
+        self.epsilon, self.card_strata = epsilon, card_strata
+        self.heuristic, self.complementary_heuristic = heuristic, complementary_heuristic
+        self.eta, self.beta, self.gamma, self.lipschitz = eta, beta, gamma, lipschitz
+        self.order, self.internal_p = order, internal_p
+        self.use_memoization, self.max_dict_size = use_memoization, max_dict_size
+        self.extended = extended
+
+        self.verbosity_level = verbosity_level
+
+        # We only need 'normalize_gradient' for vanilla and GS, Strata is *always* normalized.
+        if self.mode == "vanilla" or self.mode == "gradient_sampling":
+            self.normalize_gradient = normalize_gradient
+
+        if self.mode == 'vanilla':
+            self.vanilla_decay = vanilla_decay
 
         self.dgm, self.visited, self.curr_visited = None, {}, {}
         self.losseslist = []
         self.times = []
-
-        # Some try-except param to avoid bug in Mathieu's code ; but should be rewritten in a better way.
-        try:
-            self.internal_p = params['internal_p']
-        except:
-            print("You did not provide params['internal_p']. Default value ||_infty ground metric is used.")
-            print("You may want to use internal_p = 2 instead.")
-            self.internal_p = np.inf  # standard value if internal_p is not provided
-
-        try:
-            self.verbosity_level = params['verbosity_level']
-        except KeyError:
-            print("You did not provide params['verbosity_level']. Set to 1 by default.")
-            self.verbosity_level = 1
-
-        # We only need 'normalize_gradient' for vanilla and GS, Strata is *always* normalized.
-        if self.mode == "vanilla" or self.mode == "gradient_sampling":
-            try:
-                self.normalize_gradient = params['normalize_gradient']
-            except KeyError:
-                print("You did not provide params['normalize_gradient'] (boolean). Set to TRUE by default.")
-                print("WARNING: this was not the previous behavior of topomean, it may alter your previous results.")
-                print("NOTE: it only concerns gradient sampling and vanilla (and vanilla decay). Strata is ALWAYS normalized.")
-                self.normalize_gradient = True
-
-        if self.mode == 'vanilla':
-            try:
-                self.vanilla_decay = params['vanilla_decay']
-            except KeyError:
-                print("You didn't set if you want Vanilla with decay or not. Should set params['vanilla_decay']")
-                print('Default is FALSE (no decay).')
-                self.vanilla_decay = False
-
-    def penalty(self):
-        return tf.math.reduce_sum(tf.math.abs(self.F[:-1]-self.F[1:]))
 
     def loss(self, STPersTF, epoch):
 
         if self.mode == 'vanilla' or self.mode == 'gradient_sampling':
             start = time()
             perm = tuple(np.argsort(self.F.numpy()))
-            #print("F is:", self.F.numpy())
-            #print("The perm is : ", perm)
 
             # Don't try to compute gradients for the vertex pairs
             try:
@@ -563,7 +533,10 @@ class TopoMeanModel(tf.keras.Model):
                 self.visited[perm] = inds
 
             # Get persistence diagram
-            self.dgm = tf.reshape(tf.gather(self.F, inds), [-1,2]) if len(inds) > 0 else tf.reshape(tf.gather(self.F, [0,0]), [-1,2])
+            if len(inds) > 0:
+                self.dgm = tf.reshape(tf.gather(self.F, inds), [-1, 2])
+            else:
+                self.dgm = tf.reshape(tf.gather(self.F, [0,0]), [-1,2])
 
             # Compute the loss of this dgm.
             try: # Trick to handle Gudhi 3.5 not available
@@ -581,7 +554,7 @@ class TopoMeanModel(tf.keras.Model):
                                  for D in self.L])
 
             end = time()
-            if self.verbosity_level >= 1:
+            if self.verbosity_level >= 2:
                 print('Computing all persistence diagrams and losses took %.3f secs' %(end-start))
             self.times.append(end-start)
 
@@ -590,14 +563,8 @@ class TopoMeanModel(tf.keras.Model):
         elif self.mode == 'strata':
             start = time()
 
-            eps = self.epsilon(epoch, self.losses) if callable(self.epsilon) else self.epsilon
-            #TODO should we remove this line as it does not seem to be used?
-            card_strata = self.card_strata(epoch, self.losses) if callable(self.card_strata) else self.card_strata
             perm_curr = np.argsort(self.F.numpy()).ravel()
-            keys_to_try, dists_to_try = get_strata(self.F, STPersTF, perm_curr, eps,
-                                                   self.card_strata, self.max_dict_size, self.visited, self.heuristic,
-                                                   self.complementary_heuristic, epoch, self.use_vineyards,
-                                                   self.use_memo, self.verbosity_level)
+            keys_to_try, dists_to_try = _get_strata(self, STPersTF, perm_curr, epoch)
 
             losses = []
             self.curr_visited = len(keys_to_try)
@@ -606,18 +573,18 @@ class TopoMeanModel(tf.keras.Model):
                 print('Computing gradient over ' + str(self.curr_visited) + ' strata')
 
             for i in range(self.curr_visited):
-
                 permi_key = keys_to_try[i]
                 indices_i = self.visited[permi_key]
                 perm_i = np.array(permi_key)
                 inv_perm_i = np.argsort(perm_i)
                 perm_F_to_Fi = perm_curr[inv_perm_i]
                 F_i = tf.gather(self.F, perm_F_to_Fi)
-                assert np.linalg.norm(F_i.numpy()-self.F.numpy()) <= 2*eps
+                assert np.linalg.norm(F_i.numpy()-self.F.numpy()) <= 2 * self.epsilon
                 rebuild_grads.append(perm_F_to_Fi)
 
                 # Get persistence diagram
-                dgm_i = tf.reshape(tf.gather(F_i, indices_i), [-1,2]) if len(indices_i) > 0 else tf.reshape(tf.gather(F_i, [0,0]), [-1,2])
+                dgm_i = tf.reshape(tf.gather(F_i, indices_i), [-1,2]) if len(indices_i) > 0 \
+                    else tf.reshape(tf.gather(F_i, [0,0]), [-1,2])
 
                 if self.verbosity_level >= 2:
                     print(indices_i)
@@ -627,10 +594,10 @@ class TopoMeanModel(tf.keras.Model):
                 if np.all(perm_i == perm_curr):
                     self.dgm = dgm_i
 
-                # Loss is given as the sum of the Wasserstein distances (**order) between the current 
+                # Loss is given as the sum of the Wasserstein distances (**order) between the current
                 # persistence diagram and all other persistence diagrams in the list L
                 # Note: in some expe (min perstot, registration, L is of size 1)
-                try: # Trick when gudhi 3.5 is not released, to be removed.
+                try: # Trick when gudhi 3.5 is not officially released, to be removed.
                     loss_i = tf.add_n([wass.wasserstein_distance(dgm_i, tf.constant(D),
                                                                  order=self.order,
                                                                  internal_p=self.internal_p,
@@ -647,7 +614,7 @@ class TopoMeanModel(tf.keras.Model):
                 losses.append(loss_i)
 
             end = time()
-            if self.verbosity_level >= 1:
+            if self.verbosity_level >= 2:
                 print('Computing all persistence diagrams and losses took %.3f secs' %(end-start))
             self.times.append(end-start)
 
@@ -656,9 +623,9 @@ class TopoMeanModel(tf.keras.Model):
     def call(self, epoch):
 
         if self.extended:
-            STPersTF = lambda fct: STPers_E(fct, self.simplex, self.dim, verbosity_level=self.verbosity_level)
+            STPersTF = lambda fct: _STPers_E(fct, self.simplex, self.dim, verbosity_level=self.verbosity_level)
         else:
-            STPersTF = lambda fct: STPers_G(fct, self.simplex, self.dim)
+            STPersTF = lambda fct: _STPers_G(fct, self.simplex, self.dim)
 
         return self.loss(STPersTF, epoch=epoch)
 
@@ -666,7 +633,8 @@ class TopoMeanModel(tf.keras.Model):
 def _compute_single_gradient(grads, verbosity_level):
     """
     :param grads: A list of grads obtained from a sampling procedure (typically either random, or stratified).
-    :return: Gradient (as numpy array), the same as a tf object, and its norm. It is obtaind as a reduction over the
+    :param verbosity_level: 0 : silent, 1 : standard, 2 : debug.
+    :return: Gradient (as numpy array), Gradient (as tf object), and its norm. It is obtaind as a reduction over the
              gradients in the grads list using minimum on convex hull.
     """
 
@@ -676,7 +644,7 @@ def _compute_single_gradient(grads, verbosity_level):
         single_grad = [tf.convert_to_tensor(np.zeros(len(grads[0])))]
     # Otherwise, it is the minimum on convex hull of the grads in list computed using cvx optimizer.
     else:
-        single_grad = [tf.convert_to_tensor(min_norm_on_convex_hull(grads))]
+        single_grad = [tf.convert_to_tensor(_min_norm_on_convex_hull(grads))]
 
     try:
         G = single_grad[0].numpy()
@@ -752,7 +720,7 @@ def _reduce_gradient(topomean,
                         print("good_epsilon = ", good_epsilon)
                         print('good grads (those selected in range good_epsilon):\n', good_grads)
                     # Compute the new generalized gradient
-                    good_single_grad = [tf.convert_to_tensor(min_norm_on_convex_hull(good_grads))]
+                    good_single_grad = [tf.convert_to_tensor(_min_norm_on_convex_hull(good_grads))]
                     try:
                         G = good_single_grad[0].numpy()
                     except AttributeError:
@@ -784,7 +752,8 @@ def _reduce_gradient(topomean,
 
         counter = 0
         if verbosity_level >= 2:
-            print("\nLoss before update (curr_loss) and before the eps-reduction (possibly) starts: %5f" %curr_loss.numpy())
+            print("\nLoss before update (curr_loss) and before the eps-reduction (possibly) starts: %5f"
+                  %curr_loss.numpy())
             print("Loss after update (loss) before the eps-reduction (possibly) starts: %5f" %loss.numpy())
             print("Corresponding target loss: %5f" %target_loss.numpy())
             print("Difference between the two losses (if positive, enter the loop): %5f"
@@ -796,7 +765,7 @@ def _reduce_gradient(topomean,
             if verbosity_level >= 2:
                 print("\nI'm in the gradient sampling `while` loop since %s step." %counter)
             if counter > 100:
-                sys.exit('counter reached max value, something is weird.')
+                sys.exit('counter reached max value (100), something is weird.')
             # We decrease epsilon (step size) as previous value was too large
             good_epsilon *= gamma
             # We compute the new target loss (should be larger than the previous target)
@@ -874,12 +843,19 @@ def compute_gradient(epoch, dgms, gradients, funcs, topomean, loop_epsilon=True)
             for g in grads:
                 unique_indices, new_index_positions = tf.unique(g.indices)
                 summed_values = tf.math.unsorted_segment_sum(g.values, new_index_positions, tf.shape(unique_indices)[0])
+                #TODO : weird, are we really modifying the g here ?...
+                # Seems so as the result is correct, but must check.
                 g = tf.IndexedSlices(indices=unique_indices, values=summed_values, dense_shape=g.dense_shape)
-            grads = np.vstack([tf.sparse.to_dense(tf.sparse.reorder(tf.sparse.SparseTensor(tf.cast(g.indices[:,None], tf.int64),
-                                                                                           g.values,
-                                                                                           tf.convert_to_tensor(g.shape, tf.int64))),
-                                                  validate_indices=False).numpy()[np.newaxis,:]
-                               for g in grads])
+            grads = np.vstack([tf.sparse.to_dense(
+                tf.sparse.reorder(
+                    tf.sparse.SparseTensor(
+                        tf.cast(g.indices[:,None], tf.int64),
+                                g.values,
+                                tf.convert_to_tensor(g.shape, tf.int64)
+                    )
+                ),
+                validate_indices=False).numpy()[np.newaxis,:]
+            for g in grads])
 
         grads = np.array([g[perms[i]] for i,g in enumerate(grads)])
 
@@ -923,8 +899,13 @@ def compute_gradient(epoch, dgms, gradients, funcs, topomean, loop_epsilon=True)
             # We get the corresponding gradient and add it to our grads list.
             grad_at_point_plus_noise = losstape.gradient(loss, topomean.trainable_variables)[0]
             unique_indices, new_index_positions = tf.unique(grad_at_point_plus_noise.indices)
-            summed_values = tf.math.unsorted_segment_sum(grad_at_point_plus_noise.values, new_index_positions, tf.shape(unique_indices)[0])
-            grad_at_point_plus_noise = tf.IndexedSlices(indices=unique_indices, values=summed_values, dense_shape=grad_at_point_plus_noise.dense_shape)
+            summed_values = tf.math.unsorted_segment_sum(grad_at_point_plus_noise.values,
+                                                         new_index_positions,
+                                                         tf.shape(unique_indices)[0]
+                            )
+            grad_at_point_plus_noise = tf.IndexedSlices(indices=unique_indices,
+                                                        values=summed_values,
+                                                        dense_shape=grad_at_point_plus_noise.dense_shape)
             grads.append(grad_at_point_plus_noise)
 
             if topomean.verbosity_level >= 2:
@@ -936,11 +917,19 @@ def compute_gradient(epoch, dgms, gradients, funcs, topomean, loop_epsilon=True)
         try:
             grads = np.vstack([g.numpy()[None,:] for g in grads])
         except AttributeError:
-            grads = np.vstack([tf.sparse.to_dense(tf.sparse.reorder(tf.sparse.SparseTensor(tf.cast(g.indices[:,None], tf.int64),
-                                                                                           g.values,
-                                                                                           tf.convert_to_tensor(g.shape, tf.int64))),
-                                                  validate_indices=False).numpy()[np.newaxis,:]
-                               for g in grads])
+            grads = np.vstack([
+                tf.sparse.to_dense(
+                    tf.sparse.reorder(
+                        tf.sparse.SparseTensor(
+                            tf.cast(g.indices[:,None],
+                                    tf.int64),
+                                    g.values,
+                                    tf.convert_to_tensor(g.shape,
+                                                         tf.int64)
+                        )
+                    ),
+                validate_indices=False).numpy()[np.newaxis,:]
+            for g in grads])
 
 
         # Now, we reduce the grads list in a single_grad object (min on convex hull).
@@ -1019,104 +1008,3 @@ def compute_gradient(epoch, dgms, gradients, funcs, topomean, loop_epsilon=True)
 
 def apply_gradient(gradient, optimizer, topomean):
     optimizer.apply_gradients(zip(gradient, topomean.trainable_variables))
-
-
-def apply_long_range_strata(topomean, num=2, delta=1e-3):
-
-    currfilter = topomean.F.numpy()
-    perm_key = tuple(np.argsort(currfilter))
-
-    try:
-        inds = topomean.visited[perm_key]
-    except KeyError:
-        inds = [tf.convert_to_tensor([idx]) for idx in STPers_G(topomean.simplex, currfilter, topomean.dim)]
-        topomean.visited[perm_key] = inds
-
-    dgm = tf.reshape(tf.gather_nd(topomean.F, inds), [-1,2])
-    coords = dgm.numpy().flatten()
-    try:
-        currloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                       order=topomean.order,
-                                                       internal_p=topomean.internal_p,
-                                                       enable_autodiff=True,
-                                                       keep_essential_parts=False)**topomean.order
-                             for D in topomean.L]).numpy()
-    except:
-        currloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                       order=topomean.order,
-                                                       internal_p=topomean.internal_p,
-                                                       enable_autodiff=True)**topomean.order
-                             for D in topomean.L]).numpy()
-    useless = [i for i in range(len(currfilter)) if currfilter[i] not in coords]
-
-    if len(useless) > 0:
-        picked = np.random.choice(useless, size=min(num,len(useless)), replace=False)
-        processed = []
-
-        for i in picked:
-            idx = np.argwhere(perm_key==i)[0,0]
-            coin = np.random.uniform()
-            old_value = topomean.F[i]
-
-            if coin > 0.5:
-                if idx != len(currfilter)-1 and perm_key[idx+1] not in processed and perm_key[idx+1] in useless:
-                    topomean.F[i].assign(topomean.F[perm_key[idx+1]]+delta) #\
-                                     #min(epsilon, np.abs(topomean.F[order[idx+2]]-topomean.F[order[idx]])/2))
-                    newcurrfilter = topomean.F.numpy()
-                    try:
-                        inds = topomean.visited[tuple(np.argsort(newcurrfilter))]
-                    except KeyError:
-                        inds = [tf.convert_to_tensor([idx])
-                                for idx in STPers_G(topomean.simplex, newcurrfilter, topomean.dim)]
-
-                    dgm = tf.reshape(tf.gather_nd(topomean.F, inds), [topomean.card_dgm_max,2])
-                    try:
-                        newloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                                      order=topomean.order,
-                                                                      internal_p=topomean.internal_p,
-                                                                      enable_autodiff=True,
-                                                                      keep_essential_parts=False)**topomean.order
-                                            for D in topomean.L]).numpy()
-                    except:
-                        newloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                                      order=topomean.order,
-                                                                      internal_p=topomean.internal_p,
-                                                                      enable_autodiff=True)**topomean.order
-                                            for D in topomean.L]).numpy()
-                    if newloss <= currloss:
-                        processed.append(i)
-                    else:
-                        topomean.F[i].assign(old_value)
-                else:
-                    processed.append(i)
-            else:
-                if idx != 0 and perm_key[idx-1] not in processed and perm_key[idx-1] in useless:
-                    topomean.F[i].assign(topomean.F[perm_key[idx-1]]-delta)
-                                     #min(epsilon, np.abs(topomean.F[order[idx-2]]-topomean.F[order[idx]])/2))
-                    newcurrfilter = topomean.F.numpy()
-                    try:
-                        inds = topomean.visited[tuple(np.argsort(newcurrfilter))]
-                    except KeyError:
-                        inds = [tf.convert_to_tensor([idx])
-                                for idx in STPers_G(topomean.simplex, newcurrfilter, topomean.dim)]
-
-                    dgm = tf.reshape(tf.gather_nd(topomean.F, inds), [topomean.card_dgm_max,2])
-                    try:
-                        newloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                                      order=topomean.order,
-                                                                      enable_autodiff=True,
-                                                                      internal_p=topomean.internal_p,
-                                                                      keep_essential_parts=False)**topomean.order
-                                            for D in topomean.L]).numpy()
-                    except:
-                        newloss = tf.add_n([wass.wasserstein_distance(dgm, tf.constant(D),
-                                                                      order=topomean.order,
-                                                                      internal_p=topomean.internal_p,
-                                                                      enable_autodiff=True)**topomean.order
-                                            for D in topomean.L]).numpy()
-                    if newloss <= currloss:
-                        processed.append(i)
-                    else:
-                        topomean.F[i].assign(old_value)
-                else:
-                    processed.append(i)
