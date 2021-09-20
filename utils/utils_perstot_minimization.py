@@ -170,13 +170,3 @@ def plot_functions(F, start_epoch=-4, end_epoch=0, every=1):
         else:
             plt.plot(fct)
         plt.legend()
-
-
-def get_optimizer(mode, epsilon):
-    if mode == 'strata' or mode == 'gradient_sampling':
-        learning_rate = 1.
-
-    elif mode == 'vanilla':
-        learning_rate = epsilon
-
-    return tf.keras.optimizers.SGD(learning_rate=learning_rate)
