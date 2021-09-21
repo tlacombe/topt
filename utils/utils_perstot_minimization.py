@@ -2,7 +2,6 @@ import numpy as np
 import gudhi as gd
 import matplotlib.pyplot as plt
 import random
-import tensorflow as tf
 
 
 def build_model(N):
