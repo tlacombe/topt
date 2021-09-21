@@ -2,12 +2,13 @@ import heapq
 import sys
 from time import time
 import numpy as np
-import tensorflow as tf
-import gudhi as gd
 
+import tensorflow as tf
+import cvxpy as cp
+
+import gudhi as gd
 import gudhi.wasserstein as wass
 
-import cvxpy as cp
 
 
 ##############################
@@ -984,7 +985,7 @@ def compute_gradient(epoch, history, topomean, loop_epsilon=True):
         else:
             continue_iterations = False
 
-    if topomean.mode == 'gradient_sampling':
+    elif topomean.mode == 'gradient_sampling':
         nb_pts_sample = topomean.card_strata  # number of point we sample around the current state
         # We randomly sample nb_pts_sample noise values in (point in B(0, 1))
         noisex = _sample_noise_ball(nb_pts_sample, topomean.F.shape[0])
